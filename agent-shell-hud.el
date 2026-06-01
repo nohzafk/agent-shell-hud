@@ -137,31 +137,38 @@
                           "0 calls"))
              (elapsed-str (agent-shell-hud--format-elapsed buf))
              (usage-str (agent-shell-hud--get-usage buf))
+             (file-rows (mapcar (lambda (f)
+                                  (list :label (format "  %s" f) :value ""))
+                                agent-shell-hud--files-touched))
+             (rows (append
+                    (list
+                     (list :label agent-name
+                           :value ""
+                           :status agent-shell-hud--status
+                           :icon "agent")
+                     (list :label "Action"
+                           :value agent-shell-hud--last-action
+                           :status agent-shell-hud--status
+                           :icon "project")
+                     (list :label "Tools"
+                           :value tools-str
+                           :icon "terminal")
+                     (list :label "Elapsed"
+                           :value elapsed-str
+                           :icon "clock")
+                     (list :label "Files"
+                           :value files-str
+                           :icon "changes"))
+                    file-rows
+                    (list
+                     (list :label "Usage"
+                           :value usage-str
+                           :icon "lsp"))))
              (section-data
               (list
                :title "Agent"
                :priority 30
-               :rows (list
-                      (list :label agent-name
-                            :value ""
-                            :status agent-shell-hud--status
-                            :icon "agent")
-                      (list :label "Action"
-                            :value agent-shell-hud--last-action
-                            :status agent-shell-hud--status
-                            :icon "project")
-                      (list :label "Tools"
-                            :value tools-str
-                            :icon "terminal")
-                      (list :label "Elapsed"
-                            :value elapsed-str
-                            :icon "clock")
-                      (list :label "Files"
-                            :value files-str
-                            :icon "changes")
-                      (list :label "Usage"
-                            :value usage-str
-                            :icon "lsp")))))
+               :rows rows)))
         (workspace-hud-set-section 'agent-shell section-data)))))
 
 (defun agent-shell-hud--on-event (event)
