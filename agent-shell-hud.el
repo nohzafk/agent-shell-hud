@@ -142,6 +142,7 @@
                             :icon "agent")
                       (list :label "Action"
                             :value agent-shell-hud--last-action
+                            :status agent-shell-hud--status
                             :icon "project")
                       (list :label "Elapsed"
                             :value elapsed-str
