@@ -125,6 +125,10 @@
       (let* ((state agent-shell--state)
              (agent-config (map-elt state :agent-config))
              (agent-name (or (map-elt agent-config :mode-line-name) "Agent"))
+             (proj-root (ignore-errors (agent-shell-cwd)))
+             (proj-name (if proj-root
+                            (file-name-nondirectory (directory-file-name proj-root))
+                          "Unknown"))
              (files-count (length agent-shell-hud--files-touched))
              (files-str (if (> files-count 0)
                             (format "%d touched" files-count)
@@ -140,10 +144,13 @@
                            :value ""
                            :status agent-shell-hud--status
                            :icon "agent")
+                     (list :label "Project"
+                           :value proj-name
+                           :icon "project")
                      (list :label "Action"
                            :value agent-shell-hud--last-action
                            :status agent-shell-hud--status
-                           :icon "project")
+                           :icon "changes")
                      (list :label "Elapsed"
                            :value elapsed-str
                            :icon "clock")
@@ -229,14 +236,56 @@
        (setq-local agent-shell-hud--turn-start-time nil))
       
       ('error
-       (let ((msg (map-elt data :message)))
+       (let* ((msg (map-elt data :message))
+              (clean-msg (replace-regexp-in-string "[ \t\r\n]+" " " (or msg "Error occurred")))
+              (trimmed (replace-regexp-in-string "\\`[ \t\n\r]+\\|[ \t\n\r]+\\'" "" clean-msg)))
          (setq-local agent-shell-hud--status "error")
-         (setq-local agent-shell-hud--last-action (or msg "Error occurred"))))
+         (setq-local agent-shell-hud--last-action trimmed)))
       
       ('clean-up
        (agent-shell-hud--teardown-buffer buf)))
     
     (agent-shell-hud--push-status buf)))
+
+(defun agent-shell-hud--find-relevant-buffer ()
+  "Find the most relevant agent-shell buffer for the current context."
+  (let* ((target-buf (and (fboundp 'workspace-hud--target-buffer)
+                          (workspace-hud--target-buffer)))
+         (buffers (and (fboundp 'agent-shell-buffers)
+                       (agent-shell-buffers)))
+         (current-root (and target-buf
+                            (fboundp 'workspace-hud--repo-root)
+                            (with-current-buffer target-buf
+                              (workspace-hud--repo-root)))))
+    (or
+     ;; 1. Target buffer itself is agent-shell or viewport
+     (cl-find-if (lambda (buf)
+                   (or (eq buf target-buf)
+                       (and (buffer-live-p target-buf)
+                            (with-current-buffer target-buf
+                              (and (or (derived-mode-p 'agent-shell-viewport-view-mode)
+                                       (derived-mode-p 'agent-shell-viewport-edit-mode))
+                                   (fboundp 'agent-shell-viewport--shell-buffer)
+                                   (eq buf (agent-shell-viewport--shell-buffer target-buf)))))))
+                 buffers)
+     ;; 2. Match active shell buffer root to current repository root
+     (and current-root
+          (cl-find-if (lambda (buf)
+                        (let ((buf-root (ignore-errors (with-current-buffer buf (agent-shell-cwd)))))
+                          (and buf-root (string= (directory-file-name buf-root)
+                                                 (directory-file-name current-root)))))
+                      buffers))
+     ;; 3. Fallback to first recent buffer
+     (car buffers))))
+
+(defvar agent-shell-hud-mode)
+
+(defun agent-shell-hud--on-buffer-change (&rest _)
+  "Triggered when the window buffer or selection changes.
+This keeps the HUD up-to-date with the active session."
+  (when agent-shell-hud-mode
+    (when-let ((relevant-buf (agent-shell-hud--find-relevant-buffer)))
+      (agent-shell-hud--push-status relevant-buf))))
 
 ;; ---------------------------------------------------------------------------
 ;; Setup & Buffer Lifecycle
@@ -264,7 +313,10 @@
       (when agent-shell-hud--subscription-token
         (ignore-errors
           (agent-shell-unsubscribe :subscription agent-shell-hud--subscription-token))
-        (setq-local agent-shell-hud--subscription-token nil)))
+        (setq-local agent-shell-hud--subscription-token nil))))
+  ;; If there are other live agent-shell buffers, update the HUD with the most relevant one
+  (if-let ((relevant-buf (agent-shell-hud--find-relevant-buffer)))
+      (agent-shell-hud--push-status relevant-buf)
     (workspace-hud-remove-section 'agent-shell)))
 
 (defun agent-shell-hud--on-shell-init ()
@@ -283,12 +335,19 @@
   (if agent-shell-hud-mode
       (progn
         (add-hook 'agent-shell-mode-hook #'agent-shell-hud--on-shell-init)
+        (add-hook 'window-buffer-change-functions #'agent-shell-hud--on-buffer-change)
+        (add-hook 'window-selection-change-functions #'agent-shell-hud--on-buffer-change)
         ;; Wire up any active/existing shell buffers immediately
         (dolist (buf (buffer-list))
           (with-current-buffer buf
             (when (derived-mode-p 'agent-shell-mode)
-              (agent-shell-hud--setup-buffer buf)))))
+              (agent-shell-hud--setup-buffer buf))))
+        ;; Push the initial state for the most relevant buffer if any
+        (when-let ((relevant-buf (agent-shell-hud--find-relevant-buffer)))
+          (agent-shell-hud--push-status relevant-buf)))
     (remove-hook 'agent-shell-mode-hook #'agent-shell-hud--on-shell-init)
+    (remove-hook 'window-buffer-change-functions #'agent-shell-hud--on-buffer-change)
+    (remove-hook 'window-selection-change-functions #'agent-shell-hud--on-buffer-change)
     ;; Teardown subscriptions in all buffer instances
     (dolist (buf (buffer-list))
       (with-current-buffer buf
