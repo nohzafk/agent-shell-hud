@@ -40,6 +40,9 @@
 (defvar-local agent-shell-hud--subscription-token nil
   "Active subscription token for the agent-shell buffer.")
 
+(defvar-local agent-shell-hud--tool-call-count 0
+  "Number of tool calls made during the active turn.")
+
 (defvar-local agent-shell-hud--turn-start-time nil
   "Time when the current agent turn started.")
 
@@ -129,6 +132,9 @@
              (files-str (if (> files-count 0)
                             (format "%d touched" files-count)
                           "0 touched"))
+             (tools-str (if (> agent-shell-hud--tool-call-count 0)
+                            (format "%d calls" agent-shell-hud--tool-call-count)
+                          "0 calls"))
              (elapsed-str (agent-shell-hud--format-elapsed buf))
              (usage-str (agent-shell-hud--get-usage buf))
              (section-data
@@ -144,6 +150,9 @@
                             :value agent-shell-hud--last-action
                             :status agent-shell-hud--status
                             :icon "project")
+                      (list :label "Tools"
+                            :value tools-str
+                            :icon "terminal")
                       (list :label "Elapsed"
                             :value elapsed-str
                             :icon "clock")
@@ -173,6 +182,7 @@
        (setq-local agent-shell-hud--status "ok")
        (setq-local agent-shell-hud--last-action "Ready")
        (setq-local agent-shell-hud--files-touched nil)
+       (setq-local agent-shell-hud--tool-call-count 0)
        (agent-shell-hud--stop-elapsed-timer buf)
        (setq-local agent-shell-hud--turn-start-time nil))
       
@@ -184,6 +194,8 @@
               (kind (map-elt tool-call :kind))
               (status (map-elt tool-call :status))
               (file-path (agent-shell-hud--extract-file tool-call)))
+         (when (string= status "running")
+           (cl-incf agent-shell-hud--tool-call-count))
          (when (and file-path (stringp file-path) (> (length file-path) 0))
            (let* ((proj-root (and (fboundp 'vc-root-dir) (vc-root-dir)))
                   (clean-path (if (and proj-root (string-prefix-p proj-root file-path))
