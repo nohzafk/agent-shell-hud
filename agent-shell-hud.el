@@ -218,7 +218,8 @@
       ('turn-complete
        (setq-local agent-shell-hud--status "ok")
        (setq-local agent-shell-hud--last-action "Turn complete")
-       (agent-shell-hud--stop-elapsed-timer buf))
+       (agent-shell-hud--stop-elapsed-timer buf)
+       (setq-local agent-shell-hud--turn-start-time nil))
       
       ('error
        (let ((msg (map-elt data :message)))
