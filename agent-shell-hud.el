@@ -83,6 +83,19 @@
                               (map-elt raw-input "AbsolutePath")))))
     (or diff-file input-file)))
 
+(defun agent-shell-hud--add-touched-file (file-path)
+  "Add FILE-PATH to `agent-shell-hud--files-touched', cleaned relative to project root.
+Ignore directory paths."
+  (when (and file-path (stringp file-path) (> (length file-path) 0))
+    (let ((expanded (expand-file-name file-path)))
+      (unless (file-directory-p expanded)
+        (let* ((proj-root (ignore-errors (agent-shell-cwd)))
+               (proj-root (and proj-root (file-name-as-directory proj-root)))
+               (clean-path (if (and proj-root (string-prefix-p proj-root expanded))
+                               (substring expanded (length proj-root))
+                             (file-name-nondirectory expanded))))
+          (add-to-list 'agent-shell-hud--files-touched clean-path))))))
+
 (defun agent-shell-hud--format-elapsed (buf)
   "Return a MM:SS string for time since turn started in BUF, or empty string."
   (if (and (buffer-live-p buf)
@@ -200,12 +213,7 @@
               (kind (map-elt tool-call :kind))
               (status (map-elt tool-call :status))
               (file-path (agent-shell-hud--extract-file tool-call)))
-         (when (and file-path (stringp file-path) (> (length file-path) 0))
-           (let* ((proj-root (and (fboundp 'vc-root-dir) (vc-root-dir)))
-                  (clean-path (if (and proj-root (string-prefix-p proj-root file-path))
-                                  (substring file-path (length proj-root))
-                                (file-name-nondirectory file-path))))
-             (add-to-list 'agent-shell-hud--files-touched clean-path)))
+         (agent-shell-hud--add-touched-file file-path)
          (setq-local agent-shell-hud--status "busy")
          (setq-local agent-shell-hud--last-action
                      (cond
@@ -214,12 +222,8 @@
                       (t (format "Using %s" kind))))))
       
       ('file-write
-       (let* ((raw-path (map-elt data :path))
-              (proj-root (and (fboundp 'vc-root-dir) (vc-root-dir)))
-              (clean-path (if (and proj-root (string-prefix-p proj-root raw-path))
-                              (substring raw-path (length proj-root))
-                            (file-name-nondirectory raw-path))))
-         (add-to-list 'agent-shell-hud--files-touched clean-path)
+       (let ((raw-path (map-elt data :path)))
+         (agent-shell-hud--add-touched-file raw-path)
          (setq-local agent-shell-hud--status "busy")
          (setq-local agent-shell-hud--last-action (format "Wrote %s" (file-name-nondirectory raw-path)))))
       
