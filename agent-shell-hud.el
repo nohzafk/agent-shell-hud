@@ -83,18 +83,56 @@
                               (map-elt raw-input "AbsolutePath")))))
     (or diff-file input-file)))
 
+(defun agent-shell-hud--shorten-path (file-path)
+  "Shorten FILE-PATH to fit within the HUD's compact horizontal space.
+Inside project files are kept relative (shortened if > 24 chars).
+External files are shown as [ext] or home-relative (~/...) paths."
+  (let* ((proj-root (ignore-errors (agent-shell-cwd)))
+         (proj-root (and proj-root (file-name-as-directory (expand-file-name proj-root))))
+         (expanded (expand-file-name file-path)))
+    (if (and proj-root (string-prefix-p proj-root expanded))
+        ;; Inside project: get relative path
+        (let ((rel (substring expanded (length proj-root))))
+          (if (<= (length rel) 24)
+              rel
+            (let* ((base (file-name-nondirectory rel))
+                   (dir (file-name-directory rel))
+                   (parent (and dir (file-name-nondirectory (directory-file-name dir)))))
+              (if (and parent (> (length parent) 0))
+                  (format ".../%s/%s" parent base)
+                (format ".../%s" base)))))
+      ;; Outside project: return shortened path prefixed with ~/... or ext: .../
+      (let* ((base (file-name-nondirectory expanded))
+             (dir (file-name-directory expanded))
+             (parent (and dir (file-name-nondirectory (directory-file-name dir))))
+             (home (expand-file-name "~")))
+        (cond
+         ((string-prefix-p home expanded)
+          (let ((home-rel (substring expanded (length home))))
+            (if (<= (length home-rel) 20)
+                (format "~%s" home-rel)
+              (if (and parent (> (length parent) 0))
+                  (let ((short-parent (if (> (length parent) 12)
+                                          (concat (substring parent 0 9) "...")
+                                        parent)))
+                    (format "~/.../%s/%s" short-parent base))
+                (format "~/.../%s" base)))))
+         (t
+          (if (and parent (> (length parent) 0))
+              (let ((short-parent (if (> (length parent) 12)
+                                      (concat (substring parent 0 9) "...")
+                                    parent)))
+                (format "ext: .../%s/%s" short-parent base))
+            (format "ext: %s" base))))))))
+
 (defun agent-shell-hud--add-touched-file (file-path)
-  "Add FILE-PATH to `agent-shell-hud--files-touched', cleaned relative to project root.
+  "Add FILE-PATH to `agent-shell-hud--files-touched', cleaned and shortened.
 Ignore directory paths."
   (when (and file-path (stringp file-path) (> (length file-path) 0))
     (let ((expanded (expand-file-name file-path)))
       (unless (file-directory-p expanded)
-        (let* ((proj-root (ignore-errors (agent-shell-cwd)))
-               (proj-root (and proj-root (file-name-as-directory proj-root)))
-               (clean-path (if (and proj-root (string-prefix-p proj-root expanded))
-                               (substring expanded (length proj-root))
-                             (file-name-nondirectory expanded))))
-          (add-to-list 'agent-shell-hud--files-touched clean-path))))))
+        (let ((short-path (agent-shell-hud--shorten-path expanded)))
+          (add-to-list 'agent-shell-hud--files-touched short-path))))))
 
 (defun agent-shell-hud--format-elapsed (buf)
   "Return a MM:SS string for time since turn started in BUF, or empty string."
