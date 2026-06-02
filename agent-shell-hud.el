@@ -136,7 +136,9 @@
              (elapsed-str (agent-shell-hud--format-elapsed buf))
              (usage-str (agent-shell-hud--get-usage buf))
              (file-rows (mapcar (lambda (f)
-                                  (list :label (format "  %s" f) :value ""))
+                                  (list :label f
+                                        :value ""
+                                        :icon "dot"))
                                 agent-shell-hud--files-touched))
              (rows (append
                     (list
