@@ -220,7 +220,9 @@ Ignore directory paths."
                :title "Agent"
                :priority 30
                :rows rows)))
-        (workspace-hud-set-section 'agent-shell section-data)))))
+        (workspace-hud-set-section 'agent-shell section-data)
+        (when (fboundp 'workspace-hud--sync-visibility)
+          (workspace-hud--sync-visibility))))))
 
 (defun agent-shell-hud--on-event (event)
   "Process the incoming agent-shell EVENT and trigger HUD pushes."
@@ -368,12 +370,20 @@ This keeps the HUD up-to-date with the active session."
   (agent-shell-hud--setup-buffer (current-buffer)))
 
 (defun agent-shell-hud--show-predicate (buffer)
-  "Return non-nil if BUFFER is an agent-shell or agent-shell-viewport buffer."
-  (when (buffer-live-p buffer)
-    (with-current-buffer buffer
-      (or (derived-mode-p 'agent-shell-mode)
-          (derived-mode-p 'agent-shell-viewport-view-mode)
-          (derived-mode-p 'agent-shell-viewport-edit-mode)))))
+  "Return non-nil if BUFFER is an agent-shell or agent-shell-viewport buffer,
+or if any active agent-shell buffer requires user approval."
+  (or (when (buffer-live-p buffer)
+        (with-current-buffer buffer
+          (or (derived-mode-p 'agent-shell-mode)
+              (derived-mode-p 'agent-shell-viewport-view-mode)
+              (derived-mode-p 'agent-shell-viewport-edit-mode))))
+      (cl-some (lambda (buf)
+                 (and (buffer-live-p buf)
+                      (with-current-buffer buf
+                        (and (derived-mode-p 'agent-shell-mode)
+                             (boundp 'agent-shell-hud--status)
+                             (string= agent-shell-hud--status "warn")))))
+               (buffer-list))))
 
 ;; ---------------------------------------------------------------------------
 ;; Global Minor Mode
