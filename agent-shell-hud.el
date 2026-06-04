@@ -367,6 +367,14 @@ This keeps the HUD up-to-date with the active session."
   "Hook helper that runs when an agent shell buffer is initialized."
   (agent-shell-hud--setup-buffer (current-buffer)))
 
+(defun agent-shell-hud--show-predicate (buffer)
+  "Return non-nil if BUFFER is an agent-shell or agent-shell-viewport buffer."
+  (when (buffer-live-p buffer)
+    (with-current-buffer buffer
+      (or (derived-mode-p 'agent-shell-mode)
+          (derived-mode-p 'agent-shell-viewport-view-mode)
+          (derived-mode-p 'agent-shell-viewport-edit-mode)))))
+
 ;; ---------------------------------------------------------------------------
 ;; Global Minor Mode
 ;; ---------------------------------------------------------------------------
@@ -381,6 +389,7 @@ This keeps the HUD up-to-date with the active session."
         (add-hook 'agent-shell-mode-hook #'agent-shell-hud--on-shell-init)
         (add-hook 'window-buffer-change-functions #'agent-shell-hud--on-buffer-change)
         (add-hook 'window-selection-change-functions #'agent-shell-hud--on-buffer-change)
+        (add-to-list 'workspace-hud-show-predicates #'agent-shell-hud--show-predicate)
         ;; Wire up any active/existing shell buffers immediately
         (dolist (buf (buffer-list))
           (with-current-buffer buf
@@ -388,16 +397,21 @@ This keeps the HUD up-to-date with the active session."
               (agent-shell-hud--setup-buffer buf))))
         ;; Push the initial state for the most relevant buffer if any
         (when-let ((relevant-buf (agent-shell-hud--find-relevant-buffer)))
-          (agent-shell-hud--push-status relevant-buf)))
+          (agent-shell-hud--push-status relevant-buf))
+        (when (fboundp 'workspace-hud--sync-visibility)
+          (workspace-hud--sync-visibility)))
     (remove-hook 'agent-shell-mode-hook #'agent-shell-hud--on-shell-init)
     (remove-hook 'window-buffer-change-functions #'agent-shell-hud--on-buffer-change)
     (remove-hook 'window-selection-change-functions #'agent-shell-hud--on-buffer-change)
+    (setq workspace-hud-show-predicates (delq #'agent-shell-hud--show-predicate workspace-hud-show-predicates))
     ;; Teardown subscriptions in all buffer instances
     (dolist (buf (buffer-list))
       (with-current-buffer buf
         (when (derived-mode-p 'agent-shell-mode)
           (agent-shell-hud--teardown-buffer buf))))
-    (workspace-hud-remove-section 'agent-shell)))
+    (workspace-hud-remove-section 'agent-shell)
+    (when (fboundp 'workspace-hud--sync-visibility)
+      (workspace-hud--sync-visibility))))
 
 (provide 'agent-shell-hud)
 ;;; agent-shell-hud.el ends here
