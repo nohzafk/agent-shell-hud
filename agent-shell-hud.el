@@ -3,7 +3,7 @@
 ;; Author: emacs-egui-panel
 ;; Version: 0.1.0
 ;; Keywords: convenience, tools, agents
-;; Package-Requires: ((emacs "29.1") (workspace-hud "0.1.0") (agent-shell "0.50.1"))
+;; Package-Requires: ((emacs "29.1") (agent-shell "0.50.1"))
 
 ;;; Commentary:
 ;;
