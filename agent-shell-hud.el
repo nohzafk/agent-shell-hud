@@ -27,6 +27,13 @@
   :group 'tools
   :prefix "agent-shell-hud-")
 
+(defcustom agent-shell-hud-max-files 5
+  "Maximum number of touched files to display individually in the HUD.
+If the number of touched files exceeds this limit, the list is truncated
+and a summary row is shown indicating the remaining number of files."
+  :type 'integer
+  :group 'agent-shell-hud)
+
 ;; Buffer-local variables for state tracking
 (defvar-local agent-shell-hud--files-touched nil
   "List of project-relative paths modified during the active turn.")
@@ -186,11 +193,25 @@ Ignore directory paths."
                           "0 touched"))
              (elapsed-str (agent-shell-hud--format-elapsed buf))
              (usage-str (agent-shell-hud--get-usage buf))
-             (file-rows (mapcar (lambda (f)
-                                  (list :label f
-                                        :value ""
-                                        :icon "dot"))
-                                agent-shell-hud--files-touched))
+             (file-rows
+              (if (and agent-shell-hud-max-files
+                       (> agent-shell-hud-max-files 0)
+                       (> files-count agent-shell-hud-max-files))
+                  (let ((visible-count (1- agent-shell-hud-max-files)))
+                    (append
+                     (mapcar (lambda (f)
+                               (list :label f
+                                     :value ""
+                                     :icon "dot"))
+                             (cl-subseq agent-shell-hud--files-touched 0 visible-count))
+                     (list (list :label (format "... and %d more" (- files-count visible-count))
+                                 :value ""
+                                 :icon "dot"))))
+                (mapcar (lambda (f)
+                          (list :label f
+                                :value ""
+                                :icon "dot"))
+                        agent-shell-hud--files-touched)))
              (rows (append
                     (list
                      (list :label agent-name
